@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { z } from 'zod';
@@ -24,7 +24,15 @@ type LoginForm = z.infer<typeof loginSchema>;
 
 const Login = () => {
   const navigate = useNavigate();
-  const { login, isLoading } = useAuth();
+  const { login, isLoading, user, session } = useAuth();
+  
+  // Redirect if already logged in
+  useEffect(() => {
+    if (user && session) {
+      console.log("User already logged in, redirecting to /elections");
+      navigate('/elections');
+    }
+  }, [user, session, navigate]);
   
   const form = useForm<LoginForm>({
     resolver: zodResolver(loginSchema),
@@ -35,10 +43,12 @@ const Login = () => {
   });
   
   const onSubmit = async (data: LoginForm) => {
+    console.log("Login form submitted", data);
     const success = await login(data.email, data.password);
     
     if (success) {
-      navigate('/dashboard');
+      console.log("Login successful, redirecting to /elections");
+      navigate('/elections');
     }
   };
 

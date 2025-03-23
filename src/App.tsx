@@ -31,6 +31,7 @@ function App() {
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
               <Route path="/elections" element={<Elections />} />
+              <Route path="/dashboard" element={<Elections />} /> {/* Temporarily redirect to Elections */}
               <Route path="/verify/aadhaar" element={<VerifyAadhaar />} />
               <Route path="/verify/passport" element={<VerifyPassport />} />
               <Route path="/verify/email" element={<VerifyEmail />} />

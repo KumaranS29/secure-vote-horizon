@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -69,13 +68,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   
   // Initialize the auth state from Supabase on component mount
   useEffect(() => {
-    // Set up the auth state listener
+    // Set up the auth state listener FIRST
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        setSession(session);
+      async (event, currentSession) => {
+        console.log("Auth state changed:", event, currentSession?.user?.id);
+        setSession(currentSession);
         
-        if (session?.user) {
-          await loadUserProfile(session.user);
+        if (currentSession?.user) {
+          await loadUserProfile(currentSession.user);
         } else {
           setUser(null);
         }
@@ -84,12 +84,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     );
     
-    // Get the initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
+    // THEN check for existing session
+    supabase.auth.getSession().then(({ data: { session: currentSession } }) => {
+      console.log("Initial session check:", currentSession?.user?.id);
+      setSession(currentSession);
       
-      if (session?.user) {
-        loadUserProfile(session.user);
+      if (currentSession?.user) {
+        loadUserProfile(currentSession.user);
       } else {
         setIsLoading(false);
       }
@@ -103,6 +104,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Load user profile from the database
   const loadUserProfile = async (authUser: User) => {
     try {
+      console.log("Loading profile for user:", authUser.id);
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
@@ -110,10 +112,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .single();
       
       if (error) {
+        console.error("Error loading profile:", error);
         throw error;
       }
       
       if (data) {
+        console.log("Profile loaded:", data);
         setUser({
           id: data.id,
           name: data.name,
@@ -129,6 +133,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           faceVerified: data.face_verified,
           partyId: data.party_id || undefined
         });
+      } else {
+        console.warn("No profile found for user:", authUser.id);
       }
     } catch (error) {
       console.error('Error loading user profile:', error);
@@ -142,19 +148,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsLoading(true);
     
     try {
+      console.log("Attempting login for:", email);
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password
       });
       
       if (error) {
+        console.error("Login error:", error);
         throw error;
       }
       
+      console.log("Login successful, user:", data.user?.id);
       toast.success("Login successful");
       return true;
       
     } catch (error: any) {
+      console.error("Login error:", error);
       toast.error(error.message || "Login failed");
       return false;
     } finally {
@@ -165,9 +175,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Logout function
   const logout = async () => {
     try {
+      console.log("Attempting logout");
       await supabase.auth.signOut();
       toast.info("You have been logged out");
     } catch (error: any) {
+      console.error("Logout error:", error);
       toast.error(error.message || "Logout failed");
     }
   };
@@ -177,8 +189,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsLoading(true);
     
     try {
+      console.log("Attempting registration for:", userData.email);
+      
+      if (!userData.email) {
+        throw new Error("Email is required");
+      }
+      
       const { data, error } = await supabase.auth.signUp({
-        email: userData.email || '',
+        email: userData.email,
         password: password,
         options: {
           data: {
@@ -191,13 +209,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
       
       if (error) {
+        console.error("Registration error:", error);
         throw error;
       }
       
+      console.log("Registration successful, user:", data.user?.id);
       toast.success("Registration successful. Please verify your details.");
       return true;
       
     } catch (error: any) {
+      console.error("Registration error:", error);
       toast.error(error.message || "Registration failed");
       return false;
     } finally {

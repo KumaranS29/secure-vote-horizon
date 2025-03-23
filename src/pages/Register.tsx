@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { z } from 'zod';
@@ -14,8 +14,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import Layout from '@/components/layout/Layout';
-import { UserRole } from '@/context/AuthContext';
-import { supabase } from '@/integrations/supabase/client';
+import { UserRole, useAuth } from '@/context/AuthContext';
 
 // Form schema
 const registerSchema = z.object({
@@ -47,7 +46,14 @@ const indianStates = [
 
 const Register = () => {
   const navigate = useNavigate();
-  const [isLoading, setIsLoading] = useState(false);
+  const { register, isLoading, user, session } = useAuth();
+
+  // Redirect if already logged in
+  useEffect(() => {
+    if (user && session) {
+      navigate('/elections');
+    }
+  }, [user, session, navigate]);
   
   const form = useForm<RegisterForm>({
     resolver: zodResolver(registerSchema),
@@ -65,29 +71,22 @@ const Register = () => {
   const requiresState = selectedRole !== 'overseas_voter';
   
   const onSubmit = async (data: RegisterForm) => {
-    setIsLoading(true);
+    console.log("Registration form submitted", data);
     
     try {
-      // Sign up with Supabase
-      const { data: authData, error } = await supabase.auth.signUp({
+      // Convert the form data to the format expected by the register function
+      const userData = {
+        name: data.name,
         email: data.email,
-        password: data.password,
-        options: {
-          data: {
-            name: data.name,
-            phone: data.phone,
-            role: data.role,
-            state: data.state,
-          },
-        },
-      });
+        phone: data.phone,
+        role: data.role as UserRole,
+        state: data.state,
+      };
       
-      if (error) {
-        throw new Error(error.message);
-      }
+      const success = await register(userData, data.password);
       
-      if (authData.user) {
-        toast.success('Registration successful');
+      if (success) {
+        console.log("Registration successful, redirecting based on role");
         
         // Redirect to appropriate verification page based on role
         if (data.role === 'overseas_voter') {
@@ -97,9 +96,8 @@ const Register = () => {
         }
       }
     } catch (error: any) {
+      console.error("Registration error:", error);
       toast.error(error.message || 'Registration failed. Please try again.');
-    } finally {
-      setIsLoading(false);
     }
   };
 
