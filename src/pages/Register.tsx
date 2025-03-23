@@ -2,280 +2,209 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Eye, EyeOff, ArrowRight, ArrowLeft } from 'lucide-react';
 import { z } from 'zod';
-import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Button } from '@/components/ui/button';
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from '@/components/ui/form';
-import { Input } from '@/components/ui/input';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import Layout from '@/components/layout/Layout';
-import { useAuth, UserRole } from '@/context/AuthContext';
+import { useForm } from 'react-hook-form';
+import { toast } from 'sonner';
+import { Loader2, ChevronDown } from 'lucide-react';
 
-// States list
-const indianStates = [
-  'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh', 'Goa', 'Gujarat',
-  'Haryana', 'Himachal Pradesh', 'Jharkhand', 'Karnataka', 'Kerala', 'Madhya Pradesh',
-  'Maharashtra', 'Manipur', 'Meghalaya', 'Mizoram', 'Nagaland', 'Odisha', 'Punjab', 'Rajasthan',
-  'Sikkim', 'Tamil Nadu', 'Telangana', 'Tripura', 'Uttar Pradesh', 'Uttarakhand', 'West Bengal',
-  'Delhi', 'Jammu and Kashmir', 'Ladakh', 'Puducherry', 'Chandigarh'
-];
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import Layout from '@/components/layout/Layout';
+import { UserRole } from '@/context/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
 
 // Form schema
 const registerSchema = z.object({
   name: z.string().min(2, { message: 'Name must be at least 2 characters' }),
   email: z.string().email({ message: 'Please enter a valid email address' }),
-  phone: z.string().min(10, { message: 'Phone number must be at least 10 digits' }),
-  password: z.string().min(6, { message: 'Password must be at least 6 characters' }),
-  role: z.nativeEnum(UserRole),
+  phone: z.string().min(10, { message: 'Please enter a valid phone number' }),
+  password: z
+    .string()
+    .min(8, { message: 'Password must be at least 8 characters' })
+    .regex(/[A-Z]/, { message: 'Password must contain at least one uppercase letter' })
+    .regex(/[a-z]/, { message: 'Password must contain at least one lowercase letter' })
+    .regex(/[0-9]/, { message: 'Password must contain at least one number' }),
+  role: z.enum(['voter', 'candidate', 'state_official', 'overseas_voter'], {
+    required_error: 'Please select a role',
+  }),
   state: z.string().optional(),
-  partyId: z.string().optional(),
 });
 
-type RegisterFormValues = z.infer<typeof registerSchema>;
+type RegisterForm = z.infer<typeof registerSchema>;
 
-// OTP schema
-const otpSchema = z.object({
-  emailOtp: z.string().min(6, { message: 'OTP must be 6 digits' }).max(6),
-  phoneOtp: z.string().min(6, { message: 'OTP must be 6 digits' }).max(6),
-});
-
-type OtpFormValues = z.infer<typeof otpSchema>;
-
-// Verification schema
-const verificationSchema = z.object({
-  aadhaarId: z.string().min(12, { message: 'Aadhaar ID must be 12 digits' }).max(12),
-  passportId: z.string().min(8, { message: 'Passport ID must be 8 characters' }).optional(),
-});
-
-type VerificationFormValues = z.infer<typeof verificationSchema>;
+const indianStates = [
+  'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh', 'Goa', 'Gujarat', 
+  'Haryana', 'Himachal Pradesh', 'Jharkhand', 'Karnataka', 'Kerala', 'Madhya Pradesh', 
+  'Maharashtra', 'Manipur', 'Meghalaya', 'Mizoram', 'Nagaland', 'Odisha', 'Punjab', 'Rajasthan', 
+  'Sikkim', 'Tamil Nadu', 'Telangana', 'Tripura', 'Uttar Pradesh', 'Uttarakhand', 'West Bengal',
+  'Andaman and Nicobar Islands', 'Chandigarh', 'Dadra and Nagar Haveli and Daman and Diu', 
+  'Delhi', 'Jammu and Kashmir', 'Ladakh', 'Lakshadweep', 'Puducherry'
+];
 
 const Register = () => {
   const navigate = useNavigate();
-  const { register, sendOTP, verifyOTP, verifyAadhaar, verifyPassport } = useAuth();
-  const [showPassword, setShowPassword] = useState(false);
-  const [isRegisterComplete, setIsRegisterComplete] = useState(false);
-  const [isOtpComplete, setIsOtpComplete] = useState(false);
-  const [registeredEmail, setRegisteredEmail] = useState('');
-  const [registeredPhone, setRegisteredPhone] = useState('');
-  const [registeredRole, setRegisteredRole] = useState<UserRole>(UserRole.Voter);
-  const [currentTab, setCurrentTab] = useState("register");
+  const [isLoading, setIsLoading] = useState(false);
   
-  // Form for registration
-  const registerForm = useForm<RegisterFormValues>({
+  const form = useForm<RegisterForm>({
     resolver: zodResolver(registerSchema),
     defaultValues: {
       name: '',
       email: '',
       phone: '',
       password: '',
-      role: UserRole.Voter,
-      state: indianStates[0],
+      role: 'voter',
+      state: '',
     },
   });
+
+  const selectedRole = form.watch('role');
+  const requiresState = selectedRole !== 'overseas_voter';
   
-  // Form for OTP verification
-  const otpForm = useForm<OtpFormValues>({
-    resolver: zodResolver(otpSchema),
-    defaultValues: {
-      emailOtp: '',
-      phoneOtp: '',
-    },
-  });
-  
-  // Form for ID verification
-  const verificationForm = useForm<VerificationFormValues>({
-    resolver: zodResolver(verificationSchema),
-    defaultValues: {
-      aadhaarId: '',
-      passportId: '',
-    },
-  });
-  
-  // Watch for changes in selected role
-  const selectedRole = registerForm.watch("role");
-  
-  // Handle registration submission
-  const onRegisterSubmit = async (data: RegisterFormValues) => {
-    const success = await register({
-      name: data.name,
-      email: data.email,
-      phone: data.phone,
-      role: data.role,
-      state: data.state,
-      partyId: data.partyId,
-    }, data.password);
+  const onSubmit = async (data: RegisterForm) => {
+    setIsLoading(true);
     
-    if (success) {
-      setRegisteredEmail(data.email);
-      setRegisteredPhone(data.phone);
-      setRegisteredRole(data.role);
-      setIsRegisterComplete(true);
-      setCurrentTab("otp");
-      await sendOTP('email');
-      await sendOTP('phone');
-    }
-  };
-  
-  // Handle OTP submission
-  const onOtpSubmit = async (data: OtpFormValues) => {
-    const emailSuccess = await verifyOTP(data.emailOtp, 'email');
-    const phoneSuccess = await verifyOTP(data.phoneOtp, 'phone');
-    
-    if (emailSuccess && phoneSuccess) {
-      setIsOtpComplete(true);
-      setCurrentTab("verification");
-    }
-  };
-  
-  // Handle verification submission
-  const onVerificationSubmit = async (data: VerificationFormValues) => {
-    let success = false;
-    
-    if (registeredRole === UserRole.OverseasVoter) {
-      // For overseas voters, verify passport
-      if (data.passportId) {
-        success = await verifyPassport(data.passportId);
+    try {
+      // Sign up with Supabase
+      const { data: authData, error } = await supabase.auth.signUp({
+        email: data.email,
+        password: data.password,
+        options: {
+          data: {
+            name: data.name,
+            phone: data.phone,
+            role: data.role,
+            state: data.state,
+          },
+        },
+      });
+      
+      if (error) {
+        throw new Error(error.message);
       }
-    } else {
-      // For all other roles, verify Aadhaar
-      success = await verifyAadhaar(data.aadhaarId);
-    }
-    
-    if (success) {
-      navigate('/login');
+      
+      if (authData.user) {
+        toast.success('Registration successful');
+        
+        // Redirect to appropriate verification page based on role
+        if (data.role === 'overseas_voter') {
+          navigate('/verify/passport');
+        } else {
+          navigate('/verify/aadhaar');
+        }
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Registration failed. Please try again.');
+    } finally {
+      setIsLoading(false);
     }
   };
-  
-  // Toggle password visibility
-  const togglePasswordVisibility = () => {
-    setShowPassword(!showPassword);
-  };
-  
+
   return (
     <Layout>
-      <div className="container max-w-md mx-auto px-4 py-16">
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold mb-2">Create Account</h1>
-          <p className="text-muted-foreground">Register to start voting in elections</p>
-        </div>
-        
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
+      <div className="flex items-center justify-center min-h-screen py-20 px-4">
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4 }}
-          className="bg-white rounded-lg shadow-sm p-6 border border-border"
+          transition={{ duration: 0.5 }}
+          className="w-full max-w-md"
         >
-          <Tabs value={currentTab} onValueChange={setCurrentTab}>
-            <TabsList className="grid w-full grid-cols-3 mb-6">
-              <TabsTrigger value="register">Details</TabsTrigger>
-              <TabsTrigger value="otp" disabled={!isRegisterComplete}>Verify OTP</TabsTrigger>
-              <TabsTrigger value="verification" disabled={!isOtpComplete}>ID Verify</TabsTrigger>
-            </TabsList>
+          <Card className="border-muted/30 shadow-lg">
+            <CardHeader className="space-y-1">
+              <CardTitle className="text-2xl font-bold text-center">Create an Account</CardTitle>
+              <CardDescription className="text-center">
+                Register to vote or participate in the Electra Voting System
+              </CardDescription>
+            </CardHeader>
             
-            <TabsContent value="register">
-              <Form {...registerForm}>
-                <form onSubmit={registerForm.handleSubmit(onRegisterSubmit)} className="space-y-4">
+            <Form {...form}>
+              <form onSubmit={form.handleSubmit(onSubmit)}>
+                <CardContent className="space-y-4">
+                  {/* Name field */}
                   <FormField
-                    control={registerForm.control}
-                    name="role"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Register as</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select your role" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            <SelectItem value={UserRole.Voter}>Voter</SelectItem>
-                            <SelectItem value={UserRole.OverseasVoter}>Overseas Voter</SelectItem>
-                            <SelectItem value={UserRole.Candidate}>Political Candidate</SelectItem>
-                            <SelectItem value={UserRole.StateOfficial}>State Election Official</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  
-                  <FormField
-                    control={registerForm.control}
+                    control={form.control}
                     name="name"
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Full Name</FormLabel>
                         <FormControl>
-                          <Input placeholder="John Doe" {...field} />
+                          <Input placeholder="Enter your full name" {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
                   
+                  {/* Email field */}
                   <FormField
-                    control={registerForm.control}
+                    control={form.control}
                     name="email"
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Email</FormLabel>
                         <FormControl>
-                          <Input placeholder="your.email@example.com" {...field} />
+                          <Input type="email" placeholder="Enter your email" {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
                   
+                  {/* Phone field */}
                   <FormField
-                    control={registerForm.control}
+                    control={form.control}
                     name="phone"
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Phone Number</FormLabel>
                         <FormControl>
-                          <Input placeholder="10-digit number" {...field} />
+                          <Input type="tel" placeholder="Enter your phone number" {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
                   
+                  {/* Password field */}
                   <FormField
-                    control={registerForm.control}
-                    name="state"
+                    control={form.control}
+                    name="password"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>State</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <FormLabel>Password</FormLabel>
+                        <FormControl>
+                          <Input type="password" placeholder="Create a password" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  
+                  {/* Role field */}
+                  <FormField
+                    control={form.control}
+                    name="role"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Register as</FormLabel>
+                        <Select
+                          onValueChange={field.onChange}
+                          defaultValue={field.value}
+                        >
                           <FormControl>
                             <SelectTrigger>
-                              <SelectValue placeholder="Select your state" />
+                              <SelectValue placeholder="Select your role" />
+                              <ChevronDown className="h-4 w-4 opacity-50" />
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            {indianStates.map((state) => (
-                              <SelectItem key={state} value={state}>
-                                {state}
-                              </SelectItem>
-                            ))}
+                            <SelectItem value="voter">Voter</SelectItem>
+                            <SelectItem value="candidate">Political Candidate</SelectItem>
+                            <SelectItem value="state_official">State Election Official</SelectItem>
+                            <SelectItem value="overseas_voter">Overseas Voter</SelectItem>
                           </SelectContent>
                         </Select>
                         <FormMessage />
@@ -283,204 +212,76 @@ const Register = () => {
                     )}
                   />
                   
-                  {selectedRole === UserRole.Candidate && (
+                  {/* State field (conditional) */}
+                  {requiresState && (
                     <FormField
-                      control={registerForm.control}
-                      name="partyId"
+                      control={form.control}
+                      name="state"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Party ID</FormLabel>
-                          <FormControl>
-                            <Input placeholder="Enter party ID" {...field} />
-                          </FormControl>
+                          <FormLabel>State</FormLabel>
+                          <Select
+                            onValueChange={field.onChange}
+                            defaultValue={field.value}
+                          >
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select your state" />
+                                <ChevronDown className="h-4 w-4 opacity-50" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {indianStates.map((state) => (
+                                <SelectItem key={state} value={state}>{state}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                           <FormMessage />
-                          <p className="text-xs text-muted-foreground mt-1">
-                            For demo use: BJP001, INC002, AAP003
-                          </p>
                         </FormItem>
                       )}
                     />
                   )}
                   
-                  <FormField
-                    control={registerForm.control}
-                    name="password"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Password</FormLabel>
-                        <FormControl>
-                          <div className="relative">
-                            <Input
-                              type={showPassword ? 'text' : 'password'}
-                              placeholder="••••••••"
-                              {...field}
-                            />
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              className="absolute right-2 top-1/2 transform -translate-y-1/2"
-                              onClick={togglePasswordVisibility}
-                            >
-                              {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                            </Button>
-                          </div>
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  
-                  <Button type="submit" className="w-full group">
-                    Next
-                    <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
-                  </Button>
-                  
-                  <div className="text-center mt-4">
-                    <p className="text-sm text-muted-foreground">
-                      Already have an account? 
-                      <Link to="/login" className="text-primary hover:underline ml-1">
-                        Log in
-                      </Link>
-                    </p>
+                  <div className="mt-6">
+                    <Button
+                      type="submit"
+                      className="w-full"
+                      disabled={isLoading}
+                    >
+                      {isLoading ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Registering...
+                        </>
+                      ) : (
+                        'Register'
+                      )}
+                    </Button>
                   </div>
-                </form>
-              </Form>
-            </TabsContent>
+                </CardContent>
+              </form>
+            </Form>
             
-            <TabsContent value="otp">
-              <div className="text-center mb-4">
-                <p className="text-sm text-muted-foreground">
-                  We've sent verification codes to your email and phone
-                </p>
+            <CardFooter className="flex flex-col space-y-2">
+              <div className="text-sm text-center text-muted-foreground">
+                Already have an account?{' '}
+                <Link to="/login" className="text-primary hover:underline font-medium">
+                  Log in
+                </Link>
               </div>
               
-              <Form {...otpForm}>
-                <form onSubmit={otpForm.handleSubmit(onOtpSubmit)} className="space-y-4">
-                  <FormField
-                    control={otpForm.control}
-                    name="emailOtp"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Email Verification Code</FormLabel>
-                        <FormControl>
-                          <Input placeholder="6-digit code" {...field} maxLength={6} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  
-                  <FormField
-                    control={otpForm.control}
-                    name="phoneOtp"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Phone Verification Code</FormLabel>
-                        <FormControl>
-                          <Input placeholder="6-digit code" {...field} maxLength={6} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  
-                  <div className="flex justify-between">
-                    <Button 
-                      type="button" 
-                      variant="outline" 
-                      onClick={() => setCurrentTab("register")}
-                      className="group"
-                    >
-                      <ArrowLeft className="mr-2 h-4 w-4 transition-transform group-hover:-translate-x-1" />
-                      Back
-                    </Button>
-                    <Button type="submit" className="group">
-                      Next
-                      <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
-                    </Button>
-                  </div>
-                </form>
-              </Form>
-              
-              {/* Demo OTP info */}
-              <Alert className="mt-6 bg-muted/50 border-muted">
-                <AlertDescription>
-                  <p className="text-xs mb-1">For demo, use any 6-digit number (e.g., 123456)</p>
-                </AlertDescription>
-              </Alert>
-            </TabsContent>
-            
-            <TabsContent value="verification">
-              <div className="text-center mb-4">
-                <p className="text-sm text-muted-foreground">
-                  Please verify your identity with 
-                  {registeredRole === UserRole.OverseasVoter 
-                    ? ' your passport details' 
-                    : ' your Aadhaar details'}
-                </p>
+              <div className="text-xs text-center text-muted-foreground">
+                By registering, you agree to our{' '}
+                <Link to="/terms" className="text-primary hover:underline">
+                  Terms of Service
+                </Link>{' '}
+                and{' '}
+                <Link to="/privacy-policy" className="text-primary hover:underline">
+                  Privacy Policy
+                </Link>
               </div>
-              
-              <Form {...verificationForm}>
-                <form onSubmit={verificationForm.handleSubmit(onVerificationSubmit)} className="space-y-4">
-                  {registeredRole !== UserRole.OverseasVoter ? (
-                    <FormField
-                      control={verificationForm.control}
-                      name="aadhaarId"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Aadhaar Number</FormLabel>
-                          <FormControl>
-                            <Input placeholder="12-digit Aadhaar number" {...field} maxLength={12} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  ) : (
-                    <FormField
-                      control={verificationForm.control}
-                      name="passportId"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Passport Number</FormLabel>
-                          <FormControl>
-                            <Input placeholder="Enter passport number" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  )}
-                  
-                  <div className="flex justify-between">
-                    <Button 
-                      type="button" 
-                      variant="outline" 
-                      onClick={() => setCurrentTab("otp")}
-                      className="group"
-                    >
-                      <ArrowLeft className="mr-2 h-4 w-4 transition-transform group-hover:-translate-x-1" />
-                      Back
-                    </Button>
-                    <Button type="submit">Complete Registration</Button>
-                  </div>
-                </form>
-              </Form>
-              
-              {/* Demo verification info */}
-              <Alert className="mt-6 bg-muted/50 border-muted">
-                <AlertDescription>
-                  <p className="text-xs mb-1">For demo, use:</p>
-                  {registeredRole !== UserRole.OverseasVoter ? (
-                    <p className="text-xs">Aadhaar: 123456789012</p>
-                  ) : (
-                    <p className="text-xs">Passport: A1234567</p>
-                  )}
-                </AlertDescription>
-              </Alert>
-            </TabsContent>
-          </Tabs>
+            </CardFooter>
+          </Card>
         </motion.div>
       </div>
     </Layout>

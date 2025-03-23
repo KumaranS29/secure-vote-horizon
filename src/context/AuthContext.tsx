@@ -1,6 +1,8 @@
 
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
+import { Session, User } from "@supabase/supabase-js";
 
 // User roles
 export enum UserRole {
@@ -31,8 +33,9 @@ export interface AuthUser {
 // Auth context interface
 interface AuthContextType {
   user: AuthUser | null;
+  session: Session | null;
   isLoading: boolean;
-  login: (email: string, password: string, role: UserRole) => Promise<boolean>;
+  login: (email: string, password: string) => Promise<boolean>;
   logout: () => void;
   register: (userData: Partial<AuthUser>, password: string) => Promise<boolean>;
   verifyOTP: (otp: string, type: "email" | "phone") => Promise<boolean>;
@@ -46,6 +49,7 @@ interface AuthContextType {
 // Creating the context with default values
 const AuthContext = createContext<AuthContextType>({
   user: null,
+  session: null,
   isLoading: true,
   login: async () => false,
   logout: () => {},
@@ -58,118 +62,147 @@ const AuthContext = createContext<AuthContextType>({
   verifyFace: async () => false
 });
 
-// Mock database of users for demo purposes
-const mockUsers: Record<string, { user: AuthUser; password: string }> = {
-  "admin@evoting.gov": {
-    user: {
-      id: "admin-1",
-      name: "Admin User",
-      email: "admin@evoting.gov",
-      role: UserRole.Admin,
-      verified: true,
-      emailVerified: true,
-      phoneVerified: true
-    },
-    password: "admin123"
-  }
-};
-
-// Mock verification database
-const mockVerifications = {
-  aadhaar: ["123456789012", "987654321098"],
-  passport: ["A1234567", "B7654321"],
-  partyIds: ["BJP001", "INC002", "AAP003"]
-};
-
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<AuthUser | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   
-  // Check for user in local storage on initial load
+  // Initialize the auth state from Supabase on component mount
   useEffect(() => {
-    const storedUser = localStorage.getItem("auth_user");
-    if (storedUser) {
-      try {
-        setUser(JSON.parse(storedUser));
-      } catch (e) {
-        console.error("Failed to parse stored user:", e);
-        localStorage.removeItem("auth_user");
+    // Set up the auth state listener
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        setSession(session);
+        
+        if (session?.user) {
+          await loadUserProfile(session.user);
+        } else {
+          setUser(null);
+        }
+        
+        setIsLoading(false);
       }
-    }
-    setIsLoading(false);
+    );
+    
+    // Get the initial session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      
+      if (session?.user) {
+        loadUserProfile(session.user);
+      } else {
+        setIsLoading(false);
+      }
+    });
+    
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
-
+  
+  // Load user profile from the database
+  const loadUserProfile = async (authUser: User) => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', authUser.id)
+        .single();
+      
+      if (error) {
+        throw error;
+      }
+      
+      if (data) {
+        setUser({
+          id: data.id,
+          name: data.name,
+          email: data.email,
+          phone: data.phone || undefined,
+          role: data.role as UserRole,
+          state: data.state || undefined,
+          verified: data.verified,
+          aadhaarVerified: data.aadhaar_verified,
+          emailVerified: data.email_verified,
+          phoneVerified: data.phone_verified,
+          passportVerified: data.passport_verified,
+          faceVerified: data.face_verified,
+          partyId: data.party_id || undefined
+        });
+      }
+    } catch (error) {
+      console.error('Error loading user profile:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
   // Login function
-  const login = async (email: string, password: string, role: UserRole): Promise<boolean> => {
+  const login = async (email: string, password: string): Promise<boolean> => {
     setIsLoading(true);
     
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    // Check if user exists in our mock database
-    const userRecord = mockUsers[email.toLowerCase()];
-    
-    if (userRecord && userRecord.password === password && userRecord.user.role === role) {
-      setUser(userRecord.user);
-      localStorage.setItem("auth_user", JSON.stringify(userRecord.user));
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password
+      });
+      
+      if (error) {
+        throw error;
+      }
+      
       toast.success("Login successful");
-      setIsLoading(false);
       return true;
+      
+    } catch (error: any) {
+      toast.error(error.message || "Login failed");
+      return false;
+    } finally {
+      setIsLoading(false);
     }
-    
-    toast.error("Invalid credentials");
-    setIsLoading(false);
-    return false;
   };
   
   // Logout function
-  const logout = () => {
-    setUser(null);
-    localStorage.removeItem("auth_user");
-    toast.info("You have been logged out");
+  const logout = async () => {
+    try {
+      await supabase.auth.signOut();
+      toast.info("You have been logged out");
+    } catch (error: any) {
+      toast.error(error.message || "Logout failed");
+    }
   };
   
   // Register function
   const register = async (userData: Partial<AuthUser>, password: string): Promise<boolean> => {
     setIsLoading(true);
     
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    
-    // Check if email already exists
-    if (mockUsers[userData.email?.toLowerCase() || ""]) {
-      toast.error("Email already registered");
-      setIsLoading(false);
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email: userData.email || '',
+        password: password,
+        options: {
+          data: {
+            name: userData.name,
+            phone: userData.phone,
+            role: userData.role,
+            state: userData.state
+          }
+        }
+      });
+      
+      if (error) {
+        throw error;
+      }
+      
+      toast.success("Registration successful. Please verify your details.");
+      return true;
+      
+    } catch (error: any) {
+      toast.error(error.message || "Registration failed");
       return false;
+    } finally {
+      setIsLoading(false);
     }
-    
-    // Create new user
-    const newUserId = `user-${Date.now()}`;
-    const newUser: AuthUser = {
-      id: newUserId,
-      name: userData.name || "User",
-      email: userData.email || "",
-      phone: userData.phone,
-      role: userData.role || UserRole.Voter,
-      state: userData.state,
-      verified: false,
-      aadhaarVerified: false,
-      emailVerified: false,
-      phoneVerified: false,
-      passportVerified: false,
-      faceVerified: false,
-      partyId: userData.partyId
-    };
-    
-    // Add to mock database
-    mockUsers[newUser.email.toLowerCase()] = {
-      user: newUser,
-      password
-    };
-    
-    toast.success("Registration successful. Please verify your details.");
-    setIsLoading(false);
-    return true;
   };
   
   // OTP verification function
@@ -177,83 +210,110 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!user) return false;
     
     setIsLoading(true);
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1000));
     
-    // For demo, accept any 6-digit OTP
-    if (otp.length === 6 && /^\d+$/.test(otp)) {
-      const updatedUser = { ...user };
+    try {
+      const { data, error } = await supabase.rpc(
+        'verify_otp',
+        { p_user_id: user.id, p_code: otp, p_type: type }
+      );
       
-      if (type === "email") {
-        updatedUser.emailVerified = true;
-      } else if (type === "phone") {
-        updatedUser.phoneVerified = true;
+      if (error) {
+        throw error;
       }
       
-      // Check if all required verifications are done
-      if (
-        (updatedUser.role === UserRole.Voter && 
-         updatedUser.emailVerified && 
-         updatedUser.phoneVerified && 
-         updatedUser.aadhaarVerified) ||
-        (updatedUser.role === UserRole.OverseasVoter && 
-         updatedUser.emailVerified && 
-         updatedUser.phoneVerified && 
-         updatedUser.passportVerified) ||
-        (updatedUser.role === UserRole.Candidate && 
-         updatedUser.emailVerified && 
-         updatedUser.phoneVerified && 
-         updatedUser.aadhaarVerified &&
-         updatedUser.partyId) ||
-        (updatedUser.role === UserRole.StateOfficial && 
-         updatedUser.emailVerified && 
-         updatedUser.phoneVerified && 
-         updatedUser.aadhaarVerified)
-      ) {
-        updatedUser.verified = true;
+      if (data) {
+        // Update local user state
+        if (type === 'email') {
+          setUser(prev => prev ? { ...prev, emailVerified: true } : null);
+        } else {
+          setUser(prev => prev ? { ...prev, phoneVerified: true } : null);
+        }
+        
+        // Check if all verifications are complete
+        const { data: checkResult } = await supabase.rpc(
+          'check_verification_complete',
+          { p_user_id: user.id }
+        );
+        
+        if (checkResult) {
+          setUser(prev => prev ? { ...prev, verified: true } : null);
+        }
+        
+        toast.success(`${type === "email" ? "Email" : "Phone"} verified successfully`);
+        return true;
+      } else {
+        toast.error("Invalid OTP");
+        return false;
       }
       
-      setUser(updatedUser);
-      
-      // Update in mock database and local storage
-      if (mockUsers[user.email.toLowerCase()]) {
-        mockUsers[user.email.toLowerCase()].user = updatedUser;
-      }
-      localStorage.setItem("auth_user", JSON.stringify(updatedUser));
-      
-      toast.success(`${type === "email" ? "Email" : "Phone"} verified successfully`);
+    } catch (error: any) {
+      toast.error(error.message || "Verification failed");
+      return false;
+    } finally {
       setIsLoading(false);
-      return true;
     }
-    
-    toast.error("Invalid OTP");
-    setIsLoading(false);
-    return false;
   };
   
   // Update user function
-  const updateUser = (data: Partial<AuthUser>) => {
+  const updateUser = async (data: Partial<AuthUser>) => {
     if (!user) return;
     
-    const updatedUser = { ...user, ...data };
-    setUser(updatedUser);
-    
-    // Update in mock database and local storage
-    if (mockUsers[user.email.toLowerCase()]) {
-      mockUsers[user.email.toLowerCase()].user = updatedUser;
+    try {
+      // Map the data to the database column names
+      const updateData: Record<string, any> = {};
+      
+      if (data.name !== undefined) updateData.name = data.name;
+      if (data.phone !== undefined) updateData.phone = data.phone;
+      if (data.state !== undefined) updateData.state = data.state;
+      if (data.verified !== undefined) updateData.verified = data.verified;
+      if (data.aadhaarVerified !== undefined) updateData.aadhaar_verified = data.aadhaarVerified;
+      if (data.emailVerified !== undefined) updateData.email_verified = data.emailVerified;
+      if (data.phoneVerified !== undefined) updateData.phone_verified = data.phoneVerified;
+      if (data.passportVerified !== undefined) updateData.passport_verified = data.passportVerified;
+      if (data.faceVerified !== undefined) updateData.face_verified = data.faceVerified;
+      if (data.partyId !== undefined) updateData.party_id = data.partyId;
+      
+      // Only update if there are changes
+      if (Object.keys(updateData).length > 0) {
+        const { error } = await supabase
+          .from('profiles')
+          .update(updateData)
+          .eq('id', user.id);
+        
+        if (error) {
+          throw error;
+        }
+        
+        // Update local state
+        setUser(prev => prev ? { ...prev, ...data } : null);
+      }
+    } catch (error: any) {
+      console.error('Error updating user profile:', error);
+      toast.error(error.message || "Failed to update profile");
     }
-    localStorage.setItem("auth_user", JSON.stringify(updatedUser));
   };
   
   // Send OTP function
   const sendOTP = async (type: "email" | "phone"): Promise<boolean> => {
     if (!user) return false;
     
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    toast.success(`OTP sent to your ${type === "email" ? "email" : "phone"}. For demo, use any 6-digit number.`);
-    return true;
+    try {
+      const { data, error } = await supabase.rpc(
+        'generate_otp',
+        { p_user_id: user.id, p_type: type }
+      );
+      
+      if (error) {
+        throw error;
+      }
+      
+      toast.success(`OTP sent to your ${type === "email" ? "email" : "phone"}. For demo, use any 6-digit number.`);
+      return true;
+      
+    } catch (error: any) {
+      toast.error(error.message || `Failed to send OTP to your ${type}`);
+      return false;
+    }
   };
   
   // Verify Aadhaar
@@ -261,34 +321,43 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!user) return false;
     
     setIsLoading(true);
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1500));
     
-    // Check if Aadhaar ID exists in our mock database
-    if (mockVerifications.aadhaar.includes(aadhaarId) || aadhaarId === "123456789012") {
-      const updatedUser = { ...user, aadhaarVerified: true };
+    try {
+      const { data, error } = await supabase.rpc(
+        'verify_aadhaar',
+        { p_user_id: user.id, p_aadhaar_id: aadhaarId }
+      );
       
-      // Check if all required verifications are done
-      if (updatedUser.emailVerified && updatedUser.phoneVerified) {
-        updatedUser.verified = true;
+      if (error) {
+        throw error;
       }
       
-      setUser(updatedUser);
-      
-      // Update in mock database and local storage
-      if (mockUsers[user.email.toLowerCase()]) {
-        mockUsers[user.email.toLowerCase()].user = updatedUser;
+      if (data) {
+        setUser(prev => prev ? { ...prev, aadhaarVerified: true } : null);
+        
+        // Check if all verifications are complete
+        const { data: checkResult } = await supabase.rpc(
+          'check_verification_complete',
+          { p_user_id: user.id }
+        );
+        
+        if (checkResult) {
+          setUser(prev => prev ? { ...prev, verified: true } : null);
+        }
+        
+        toast.success("Aadhaar verified successfully");
+        return true;
+      } else {
+        toast.error("Invalid Aadhaar ID");
+        return false;
       }
-      localStorage.setItem("auth_user", JSON.stringify(updatedUser));
       
-      toast.success("Aadhaar verified successfully");
+    } catch (error: any) {
+      toast.error(error.message || "Aadhaar verification failed");
+      return false;
+    } finally {
       setIsLoading(false);
-      return true;
     }
-    
-    toast.error("Invalid Aadhaar ID");
-    setIsLoading(false);
-    return false;
   };
   
   // Verify Passport
@@ -296,34 +365,43 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!user) return false;
     
     setIsLoading(true);
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1500));
     
-    // Check if Passport ID exists in our mock database
-    if (mockVerifications.passport.includes(passportId) || passportId === "A1234567") {
-      const updatedUser = { ...user, passportVerified: true };
+    try {
+      const { data, error } = await supabase.rpc(
+        'verify_passport',
+        { p_user_id: user.id, p_passport_id: passportId }
+      );
       
-      // Check if all required verifications are done
-      if (updatedUser.emailVerified && updatedUser.phoneVerified) {
-        updatedUser.verified = true;
+      if (error) {
+        throw error;
       }
       
-      setUser(updatedUser);
-      
-      // Update in mock database and local storage
-      if (mockUsers[user.email.toLowerCase()]) {
-        mockUsers[user.email.toLowerCase()].user = updatedUser;
+      if (data) {
+        setUser(prev => prev ? { ...prev, passportVerified: true } : null);
+        
+        // Check if all verifications are complete
+        const { data: checkResult } = await supabase.rpc(
+          'check_verification_complete',
+          { p_user_id: user.id }
+        );
+        
+        if (checkResult) {
+          setUser(prev => prev ? { ...prev, verified: true } : null);
+        }
+        
+        toast.success("Passport verified successfully");
+        return true;
+      } else {
+        toast.error("Invalid Passport ID");
+        return false;
       }
-      localStorage.setItem("auth_user", JSON.stringify(updatedUser));
       
-      toast.success("Passport verified successfully");
+    } catch (error: any) {
+      toast.error(error.message || "Passport verification failed");
+      return false;
+    } finally {
       setIsLoading(false);
-      return true;
     }
-    
-    toast.error("Invalid Passport ID");
-    setIsLoading(false);
-    return false;
   };
   
   // Verify Face
@@ -331,28 +409,40 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!user) return false;
     
     setIsLoading(true);
+    
     // Simulate API call
     await new Promise(resolve => setTimeout(resolve, 2000));
     
-    // For demo, always succeed
-    const updatedUser = { ...user, faceVerified: true };
-    setUser(updatedUser);
-    
-    // Update in mock database and local storage
-    if (mockUsers[user.email.toLowerCase()]) {
-      mockUsers[user.email.toLowerCase()].user = updatedUser;
+    try {
+      const updateData = { face_verified: true };
+      
+      const { error } = await supabase
+        .from('profiles')
+        .update(updateData)
+        .eq('id', user.id);
+      
+      if (error) {
+        throw error;
+      }
+      
+      setUser(prev => prev ? { ...prev, faceVerified: true } : null);
+      
+      toast.success("Face verification successful");
+      return true;
+      
+    } catch (error: any) {
+      toast.error(error.message || "Face verification failed");
+      return false;
+    } finally {
+      setIsLoading(false);
     }
-    localStorage.setItem("auth_user", JSON.stringify(updatedUser));
-    
-    toast.success("Face verification successful");
-    setIsLoading(false);
-    return true;
   };
   
   return (
     <AuthContext.Provider 
-      value={{ 
-        user, 
+      value={{
+        user,
+        session,
         isLoading,
         login,
         logout,
