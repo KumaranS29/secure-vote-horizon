@@ -12,9 +12,9 @@ const Footer = () => {
           <div className="col-span-1 md:col-span-1">
             <Link to="/" className="flex items-center mb-4">
               <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center mr-3">
-                <span className="text-white font-bold text-lg">EV</span>
+                <span className="text-white font-bold text-lg">EL</span>
               </div>
-              <h2 className="text-xl font-semibold">E-VotingSystem</h2>
+              <h2 className="text-xl font-semibold">Electra Voting System</h2>
             </Link>
             <p className="text-muted-foreground text-sm mb-6">
               A secure, transparent digital voting platform built with advanced security measures and blockchain technology.
@@ -101,7 +101,7 @@ const Footer = () => {
               <li className="flex items-start">
                 <Mail size={18} className="mr-2 mt-0.5 text-muted-foreground" />
                 <span className="text-sm text-muted-foreground">
-                  contact@evotingsystem.com
+                  contact@electravoting.com
                 </span>
               </li>
               <li className="flex items-start">
@@ -122,7 +122,7 @@ const Footer = () => {
         {/* Copyright */}
         <div className="border-t border-muted/30 mt-10 pt-6 text-center">
           <p className="text-sm text-muted-foreground">
-            &copy; {new Date().getFullYear()} E-VotingSystem. All rights reserved.
+            &copy; {new Date().getFullYear()} Electra Voting System. All rights reserved.
           </p>
         </div>
       </div>

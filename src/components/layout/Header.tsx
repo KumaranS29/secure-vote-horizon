@@ -65,10 +65,10 @@ const Header = () => {
             className="flex items-center"
           >
             <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center mr-3">
-              <span className="text-white font-bold text-lg">EV</span>
+              <span className="text-white font-bold text-lg">EL</span>
             </div>
             <h1 className="text-xl font-semibold bg-clip-text text-transparent bg-gradient-to-r from-primary to-primary/70">
-              E-VotingSystem
+              Electra Voting System
             </h1>
           </motion.div>
         </Link>

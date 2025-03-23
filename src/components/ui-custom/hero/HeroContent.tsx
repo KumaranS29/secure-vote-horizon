@@ -31,7 +31,7 @@ const HeroContent: React.FC = () => {
         transition={{ duration: 0.6, delay: 0.2 }}
         className="text-lg text-muted-foreground mb-6"
       >
-        Experience a new era of transparent, secure, and accessible elections through our state-of-the-art digital voting platform powered by blockchain technology.
+        Experience a new era of transparent, secure, and accessible elections through Electra's state-of-the-art digital voting platform powered by blockchain technology.
       </motion.p>
       
       <motion.div 
