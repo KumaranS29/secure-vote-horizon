@@ -15,6 +15,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import Layout from '@/components/layout/Layout';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/context/AuthContext';
+import { VerificationProgress } from '@/components/ui-custom/VerificationProgress';
 
 const aadhaarSchema = z.object({
   aadhaarId: z.string()
@@ -26,7 +27,7 @@ type AadhaarForm = z.infer<typeof aadhaarSchema>;
 
 const VerifyAadhaar = () => {
   const navigate = useNavigate();
-  const { user, updateUser } = useAuth();
+  const { user, updateUser, verifyAadhaar } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   
   useEffect(() => {
@@ -41,6 +42,12 @@ const VerifyAadhaar = () => {
     if (user.aadhaarVerified) {
       toast.success('Aadhaar already verified');
       navigate('/verify/email');
+    }
+    
+    // Check if user role is overseas_voter, redirect to passport verification
+    if (user.role === 'overseas_voter') {
+      toast.info('As an overseas voter, you need to verify your passport instead');
+      navigate('/verify/passport');
     }
   }, [user, navigate]);
   
@@ -57,20 +64,10 @@ const VerifyAadhaar = () => {
     setIsLoading(true);
     
     try {
-      // Call the RPC function to verify Aadhaar
-      const { data: verificationResult, error } = await supabase.rpc(
-        'verify_aadhaar',
-        { p_user_id: user.id, p_aadhaar_id: data.aadhaarId }
-      );
+      // Use the verifyAadhaar method from AuthContext
+      const success = await verifyAadhaar(data.aadhaarId);
       
-      if (error) {
-        throw new Error(error.message);
-      }
-      
-      if (verificationResult) {
-        // Update the local user state
-        updateUser({ aadhaarVerified: true });
-        
+      if (success) {
         toast.success('Aadhaar verification successful');
         navigate('/verify/email');
       } else {
@@ -151,6 +148,8 @@ const VerifyAadhaar = () => {
                       )}
                     </Button>
                   </div>
+                  
+                  <VerificationProgress />
                 </CardContent>
               </form>
             </Form>

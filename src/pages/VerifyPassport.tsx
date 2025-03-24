@@ -15,6 +15,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import Layout from '@/components/layout/Layout';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/context/AuthContext';
+import { VerificationProgress } from '@/components/ui-custom/VerificationProgress';
 
 const passportSchema = z.object({
   passportId: z.string()
@@ -26,7 +27,7 @@ type PassportForm = z.infer<typeof passportSchema>;
 
 const VerifyPassport = () => {
   const navigate = useNavigate();
-  const { user, updateUser } = useAuth();
+  const { user, updateUser, verifyPassport } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   
   useEffect(() => {
@@ -45,7 +46,7 @@ const VerifyPassport = () => {
     
     // Check if user is an overseas voter
     if (user.role !== 'overseas_voter') {
-      toast.error('This verification is only for overseas voters');
+      toast.info('This verification is only for overseas voters. Redirecting to Aadhaar verification.');
       navigate('/verify/aadhaar');
     }
   }, [user, navigate]);
@@ -63,20 +64,10 @@ const VerifyPassport = () => {
     setIsLoading(true);
     
     try {
-      // Call the RPC function to verify Passport
-      const { data: verificationResult, error } = await supabase.rpc(
-        'verify_passport',
-        { p_user_id: user.id, p_passport_id: data.passportId }
-      );
+      // Use the verifyPassport method from AuthContext
+      const success = await verifyPassport(data.passportId);
       
-      if (error) {
-        throw new Error(error.message);
-      }
-      
-      if (verificationResult) {
-        // Update the local user state
-        updateUser({ passportVerified: true });
-        
+      if (success) {
         toast.success('Passport verification successful');
         navigate('/verify/email');
       } else {
@@ -157,6 +148,8 @@ const VerifyPassport = () => {
                       )}
                     </Button>
                   </div>
+                  
+                  <VerificationProgress />
                 </CardContent>
               </form>
             </Form>

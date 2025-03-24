@@ -223,55 +223,55 @@ export type Database = {
       }
       profiles: {
         Row: {
-          aadhaar_verified: boolean
+          aadhaar_verified: boolean | null
           created_at: string | null
           email: string
-          email_verified: boolean
-          face_verified: boolean
+          email_verified: boolean | null
+          face_verified: boolean | null
           id: string
           name: string
           party_id: string | null
-          passport_verified: boolean
+          passport_verified: boolean | null
           phone: string | null
-          phone_verified: boolean
+          phone_verified: boolean | null
           role: Database["public"]["Enums"]["user_role"]
           state: string | null
           updated_at: string | null
-          verified: boolean
+          verified: boolean | null
         }
         Insert: {
-          aadhaar_verified?: boolean
+          aadhaar_verified?: boolean | null
           created_at?: string | null
           email: string
-          email_verified?: boolean
-          face_verified?: boolean
+          email_verified?: boolean | null
+          face_verified?: boolean | null
           id: string
           name: string
           party_id?: string | null
-          passport_verified?: boolean
+          passport_verified?: boolean | null
           phone?: string | null
-          phone_verified?: boolean
-          role?: Database["public"]["Enums"]["user_role"]
+          phone_verified?: boolean | null
+          role: Database["public"]["Enums"]["user_role"]
           state?: string | null
           updated_at?: string | null
-          verified?: boolean
+          verified?: boolean | null
         }
         Update: {
-          aadhaar_verified?: boolean
+          aadhaar_verified?: boolean | null
           created_at?: string | null
           email?: string
-          email_verified?: boolean
-          face_verified?: boolean
+          email_verified?: boolean | null
+          face_verified?: boolean | null
           id?: string
           name?: string
           party_id?: string | null
-          passport_verified?: boolean
+          passport_verified?: boolean | null
           phone?: string | null
-          phone_verified?: boolean
+          phone_verified?: boolean | null
           role?: Database["public"]["Enums"]["user_role"]
           state?: string | null
           updated_at?: string | null
-          verified?: boolean
+          verified?: boolean | null
         }
         Relationships: []
       }

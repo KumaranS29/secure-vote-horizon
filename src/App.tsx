@@ -15,6 +15,7 @@ import VerifyPassport from "@/pages/VerifyPassport";
 import VerifyEmail from "@/pages/VerifyEmail";
 import VerifyPhone from "@/pages/VerifyPhone";
 import VerifyFace from "@/pages/VerifyFace";
+import VerifyParty from "@/pages/VerifyParty";
 import VerificationPending from "@/pages/VerificationPending";
 import Dashboard from "@/pages/Dashboard";
 import ForgotPassword from "@/pages/ForgotPassword";
@@ -43,6 +44,7 @@ function App() {
               <Route path="/verify/email" element={<VerifyEmail />} />
               <Route path="/verify/phone" element={<VerifyPhone />} />
               <Route path="/verify/face" element={<VerifyFace />} />
+              <Route path="/verify/party" element={<VerifyParty />} />
               <Route path="/verification-pending" element={<VerificationPending />} />
               <Route path="*" element={<NotFound />} />
             </Routes>

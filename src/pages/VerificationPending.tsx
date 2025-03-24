@@ -8,63 +8,16 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import Layout from '@/components/layout/Layout';
 import { useAuth, UserRole } from '@/context/AuthContext';
+import { VerificationProgress } from '@/components/ui-custom/VerificationProgress';
 
 const VerificationPending = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   
-  const getVerificationStatus = () => {
-    if (!user) return null;
-    
-    const verifications = [
-      {
-        label: 'Email Verification',
-        completed: user.emailVerified,
-        path: '/verify/email'
-      },
-      {
-        label: 'Phone Verification',
-        completed: user.phoneVerified,
-        path: '/verify/phone'
-      }
-    ];
-    
-    // Add ID verification based on user role
-    if (user.role === UserRole.OverseasVoter) {
-      verifications.unshift({
-        label: 'Passport Verification',
-        completed: user.passportVerified,
-        path: '/verify/passport'
-      });
-    } else {
-      verifications.unshift({
-        label: 'Aadhaar Verification',
-        completed: user.aadhaarVerified,
-        path: '/verify/aadhaar'
-      });
-    }
-    
-    // Add face verification
-    verifications.push({
-      label: 'Face Verification',
-      completed: user.faceVerified,
-      path: '/verify/face'
-    });
-    
-    // Add party registration for candidates
-    if (user.role === UserRole.Candidate) {
-      verifications.push({
-        label: 'Party Registration',
-        completed: !!user.partyId,
-        path: '/verify/party'
-      });
-    }
-    
-    return verifications;
-  };
-  
-  const verifications = getVerificationStatus();
-  const pendingVerification = verifications?.find(v => !v.completed);
+  if (!user) {
+    navigate('/login');
+    return null;
+  }
 
   return (
     <Layout>
@@ -88,47 +41,22 @@ const VerificationPending = () => {
               </CardDescription>
             </CardHeader>
             
-            <CardContent className="space-y-4">
-              <div className="space-y-3">
-                {verifications?.map((verification, index) => (
-                  <div 
-                    key={index}
-                    className="flex items-center p-3 rounded-lg border"
-                  >
-                    {verification.completed ? (
-                      <CheckCircle2 className="h-5 w-5 text-green-500 mr-3 flex-shrink-0" />
-                    ) : (
-                      <div className="h-5 w-5 rounded-full border-2 border-amber-500 mr-3 flex-shrink-0"></div>
-                    )}
-                    <div className="flex-grow">
-                      <p className="font-medium">{verification.label}</p>
-                    </div>
-                    {!verification.completed && (
-                      <Button 
-                        variant="outline" 
-                        size="sm"
-                        onClick={() => navigate(verification.path)}
-                      >
-                        Complete
-                      </Button>
-                    )}
-                  </div>
-                ))}
-              </div>
-              
+            <CardContent className="space-y-6">
               <div className="bg-blue-50 p-4 rounded-lg">
                 <div className="flex">
                   <ShieldCheck className="h-5 w-5 text-blue-600 mr-2 flex-shrink-0" />
                   <div>
                     <p className="text-sm font-medium text-blue-800">Verification Status</p>
                     <p className="text-sm text-blue-700 mt-1">
-                      {pendingVerification 
-                        ? `Please complete your ${pendingVerification.label.toLowerCase()} to proceed.`
-                        : 'All verifications complete! Your account is under review.'}
+                      {user.verified 
+                        ? 'All verifications complete! Your account is ready to use.'
+                        : 'Please complete all verification steps to access full platform features.'}
                     </p>
                   </div>
                 </div>
               </div>
+              
+              <VerificationProgress />
             </CardContent>
             
             <CardFooter>

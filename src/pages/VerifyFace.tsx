@@ -1,22 +1,21 @@
 
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
-import { Loader2, Camera, CheckCircle2, XCircle } from 'lucide-react';
+import { Camera, Loader2, CheckCircle2, RefreshCw } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import Layout from '@/components/layout/Layout';
 import { useAuth } from '@/context/AuthContext';
+import { VerificationProgress } from '@/components/ui-custom/VerificationProgress';
 
 const VerifyFace = () => {
   const navigate = useNavigate();
-  const { user, verifyFace } = useAuth();
+  const { user, updateUser, verifyFace } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
-  const [captureMode, setCaptureMode] = useState(false);
-  const [countdown, setCountdown] = useState(0);
-  const [faceDetected, setFaceDetected] = useState(false);
+  const [stream, setStream] = useState<MediaStream | null>(null);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -29,110 +28,101 @@ const VerifyFace = () => {
       return;
     }
     
-    // If user has already verified face, redirect to dashboard
+    // If user has already verified their face, redirect to dashboard
     if (user.faceVerified) {
       toast.success('Face already verified');
       navigate('/dashboard');
+    } else {
+      // Initialize camera
+      startCamera();
     }
-  }, [user, navigate]);
-  
-  useEffect(() => {
-    // Clean up video stream when component unmounts
+    
+    // Cleanup on unmount
     return () => {
-      if (videoRef.current && videoRef.current.srcObject) {
-        const tracks = (videoRef.current.srcObject as MediaStream).getTracks();
-        tracks.forEach(track => track.stop());
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
       }
     };
-  }, []);
-  
-  useEffect(() => {
-    // Start countdown if in capture mode
-    if (captureMode && countdown > 0) {
-      const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
-      return () => clearTimeout(timer);
-    } else if (captureMode && countdown === 0 && !capturedImage) {
-      // Capture image when countdown reaches 0
-      captureImage();
-    }
-  }, [captureMode, countdown, capturedImage]);
+  }, [user, navigate]);
   
   const startCamera = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { width: 640, height: 480, facingMode: 'user' } 
+      const cameraStream = await navigator.mediaDevices.getUserMedia({ 
+        video: { facingMode: "user" } 
       });
       
+      setStream(cameraStream);
+      
       if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
+        videoRef.current.srcObject = cameraStream;
       }
-      
-      setCaptureMode(true);
-      setCountdown(3);
-      
-      // Simulate face detection after a delay
-      setTimeout(() => {
-        setFaceDetected(true);
-      }, 1500);
-      
-    } catch (error) {
-      console.error('Error accessing camera:', error);
-      toast.error('Unable to access camera. Please grant camera permissions.');
+    } catch (err) {
+      console.error('Error accessing camera:', err);
+      toast.error('Could not access camera. Please ensure you have granted camera permissions.');
     }
   };
   
   const captureImage = () => {
-    if (!videoRef.current || !canvasRef.current || !faceDetected) return;
+    if (!videoRef.current || !canvasRef.current) return;
     
     const video = videoRef.current;
     const canvas = canvasRef.current;
     
+    // Set canvas dimensions to match video
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
     
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    
-    const imageData = canvas.toDataURL('image/png');
-    setCapturedImage(imageData);
-    
-    // Stop camera stream
-    const stream = video.srcObject as MediaStream;
-    if (stream) {
-      const tracks = stream.getTracks();
-      tracks.forEach(track => track.stop());
-      video.srcObject = null;
+    // Draw current video frame to canvas
+    const context = canvas.getContext('2d');
+    if (context) {
+      context.drawImage(video, 0, 0, canvas.width, canvas.height);
+      
+      // Convert canvas to data URL
+      const imageDataUrl = canvas.toDataURL('image/png');
+      setCapturedImage(imageDataUrl);
+      
+      // Stop camera
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+        setStream(null);
+      }
     }
   };
   
-  const resetCapture = () => {
+  const retakeImage = () => {
     setCapturedImage(null);
-    setCaptureMode(false);
-    setFaceDetected(false);
+    startCamera();
   };
   
   const handleVerify = async () => {
-    if (!capturedImage) return;
+    if (!capturedImage) {
+      toast.error('Please capture your face image first');
+      return;
+    }
     
     setIsLoading(true);
     
     try {
-      // Verify face using the captured image
+      // In a real application, you would send the image to the server for verification
+      // For demo purposes, we'll simulate face verification with the verifyFace method
       const success = await verifyFace();
       
       if (success) {
         toast.success('Face verification successful');
-        navigate('/dashboard');
+        
+        // Determine where to navigate based on user role
+        if (user?.role === 'candidate' && !user.partyId) {
+          navigate('/verify/party');
+        } else if (user?.verified) {
+          navigate('/dashboard');
+        } else {
+          navigate('/verification-pending');
+        }
       } else {
-        toast.error('Face verification failed. Please try again.');
-        resetCapture();
+        toast.error('Face verification failed');
       }
     } catch (error: any) {
-      toast.error(error.message || 'Verification failed. Please try again.');
-      resetCapture();
+      toast.error(error.message || 'Face verification failed');
     } finally {
       setIsLoading(false);
     }
@@ -140,7 +130,7 @@ const VerifyFace = () => {
 
   return (
     <Layout>
-      <div className="flex items-center justify-center min-h-screen py-20 px-4">
+      <div className="flex items-center justify-center min-h-screen py-10 px-4">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -151,110 +141,95 @@ const VerifyFace = () => {
             <CardHeader className="space-y-1">
               <CardTitle className="text-2xl font-bold text-center">Face Verification</CardTitle>
               <CardDescription className="text-center">
-                {!captureMode 
-                  ? 'Verify your identity using facial recognition'
-                  : !capturedImage
-                    ? `Get ready to capture ${countdown > 0 ? `in ${countdown}...` : 'now!'}`
-                    : 'Confirm your face image'
-                }
+                Please look at the camera and capture a clear photo of your face
               </CardDescription>
             </CardHeader>
             
             <CardContent className="space-y-4">
               <div className="flex justify-center mb-4">
-                {!captureMode && !capturedImage && (
-                  <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center">
-                    <Camera className="h-8 w-8 text-primary" />
-                  </div>
-                )}
+                <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center">
+                  <Camera className="h-8 w-8 text-primary" />
+                </div>
               </div>
-
-              <div className="relative rounded-lg overflow-hidden bg-black/5 aspect-video flex items-center justify-center">
-                {captureMode && !capturedImage ? (
+              
+              <div className="relative w-full aspect-square bg-gray-100 rounded-lg overflow-hidden mb-4 flex items-center justify-center">
+                {!capturedImage && (
                   <>
-                    <video 
-                      ref={videoRef} 
-                      className="w-full h-full object-cover" 
-                      muted
+                    <video
+                      ref={videoRef}
+                      autoPlay
                       playsInline
+                      muted
+                      className="w-full h-full object-cover"
                     />
-                    {faceDetected && (
-                      <div className="absolute inset-0 border-4 border-green-500 opacity-60 flex items-center justify-center">
-                        <div className="bg-green-500/20 backdrop-blur-sm rounded-lg px-3 py-1 text-white text-sm font-medium">
-                          Face Detected
-                        </div>
-                      </div>
-                    )}
-                    {countdown > 0 && (
-                      <div className="absolute inset-0 flex items-center justify-center">
-                        <div className="bg-black/50 text-white text-6xl font-bold rounded-full w-20 h-20 flex items-center justify-center">
-                          {countdown}
-                        </div>
-                      </div>
-                    )}
+                    <div className="absolute inset-0 border-4 border-dashed border-primary/30 rounded-lg pointer-events-none"></div>
                   </>
-                ) : capturedImage ? (
-                  <img 
-                    src={capturedImage} 
-                    alt="Captured" 
-                    className="w-full h-full object-cover" 
-                  />
-                ) : (
-                  <div className="text-center py-10 text-muted-foreground">
-                    <p>Camera preview will appear here</p>
-                    <p className="text-sm mt-1">Click "Start Camera" to begin</p>
-                  </div>
                 )}
                 
+                {capturedImage && (
+                  <img 
+                    src={capturedImage} 
+                    alt="Captured face" 
+                    className="w-full h-full object-cover"
+                  />
+                )}
+                
+                {/* Hidden canvas for image capture */}
                 <canvas ref={canvasRef} className="hidden" />
               </div>
               
-              <div className="text-sm text-center text-muted-foreground mt-2">
-                <p>
-                  For the actual implementation, a real facial recognition AI would be used.
-                  This demo will automatically verify after capture.
-                </p>
+              <div className="flex gap-2 justify-center">
+                {!capturedImage ? (
+                  <Button
+                    type="button"
+                    onClick={captureImage}
+                    className="w-full"
+                    disabled={!stream}
+                  >
+                    <Camera className="mr-2 h-4 w-4" />
+                    Capture Image
+                  </Button>
+                ) : (
+                  <>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={retakeImage}
+                      className="flex-1"
+                    >
+                      <RefreshCw className="mr-2 h-4 w-4" />
+                      Retake
+                    </Button>
+                    
+                    <Button
+                      type="button"
+                      onClick={handleVerify}
+                      className="flex-1"
+                      disabled={isLoading}
+                    >
+                      {isLoading ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Verifying...
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle2 className="mr-2 h-4 w-4" />
+                          Verify
+                        </>
+                      )}
+                    </Button>
+                  </>
+                )}
               </div>
+              
+              <div className="text-sm text-center text-muted-foreground mt-2">
+                <p>Ensure your face is well-lit and clearly visible</p>
+                <p>For demo purposes, all verifications will succeed</p>
+              </div>
+              
+              <VerificationProgress />
             </CardContent>
-            
-            <CardFooter className="flex gap-2">
-              {!captureMode && !capturedImage ? (
-                <Button
-                  className="w-full"
-                  onClick={startCamera}
-                >
-                  Start Camera
-                </Button>
-              ) : capturedImage ? (
-                <>
-                  <Button
-                    variant="outline"
-                    onClick={resetCapture}
-                    className="flex-1"
-                  >
-                    <XCircle className="mr-2 h-4 w-4" />
-                    Retake
-                  </Button>
-                  <Button
-                    onClick={handleVerify}
-                    className="flex-1"
-                    disabled={isLoading}
-                  >
-                    {isLoading ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Verifying...
-                      </>
-                    ) : (
-                      <>
-                        <CheckCircle2 className="mr-2 h-4 w-4" />
-                        Confirm
-                      </>
-                    )}
-                  </Button>
-                </>
-              ) : null}
-            </CardFooter>
           </Card>
         </motion.div>
       </div>

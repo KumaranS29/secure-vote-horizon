@@ -15,6 +15,7 @@ import { InputOTP, InputOTPGroup, InputOTPSlot } from '@/components/ui/input-otp
 import Layout from '@/components/layout/Layout';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/context/AuthContext';
+import { VerificationProgress } from '@/components/ui-custom/VerificationProgress';
 
 const otpSchema = z.object({
   otp: z.string().length(6, { message: 'OTP must be exactly 6 digits' })
@@ -70,15 +71,13 @@ const VerifyEmail = () => {
     setCountdown(60);
     
     try {
-      // Generate and send OTP
-      const { data, error } = await supabase.rpc(
-        'generate_otp', 
-        { p_user_id: user.id, p_type: 'email' }
-      );
+      const success = await sendOTP('email');
       
-      if (error) throw new Error(error.message);
-      
-      toast.success(`OTP sent to your email. For demo purposes, use any 6-digit number.`);
+      if (success) {
+        toast.success(`OTP sent to your email. For demo purposes, use any 6-digit number.`);
+      } else {
+        throw new Error('Failed to send OTP');
+      }
     } catch (error: any) {
       toast.error(error.message || 'Failed to send OTP. Please try again.');
       setResendDisabled(false);
@@ -105,12 +104,6 @@ const VerifyEmail = () => {
       if (verificationResult) {
         // Update local user state
         updateUser({ emailVerified: true });
-        
-        // Check if all verifications are complete
-        const { data: checkResult } = await supabase.rpc(
-          'check_verification_complete',
-          { p_user_id: user.id }
-        );
         
         toast.success('Email verification successful');
         navigate('/verify/phone');
@@ -209,6 +202,8 @@ const VerifyEmail = () => {
                       )}
                     </Button>
                   </div>
+                  
+                  <VerificationProgress />
                 </CardContent>
               </form>
             </Form>

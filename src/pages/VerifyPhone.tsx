@@ -15,6 +15,7 @@ import { InputOTP, InputOTPGroup, InputOTPSlot } from '@/components/ui/input-otp
 import Layout from '@/components/layout/Layout';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/context/AuthContext';
+import { VerificationProgress } from '@/components/ui-custom/VerificationProgress';
 
 const otpSchema = z.object({
   otp: z.string().length(6, { message: 'OTP must be exactly 6 digits' })
@@ -24,7 +25,7 @@ type OtpForm = z.infer<typeof otpSchema>;
 
 const VerifyPhone = () => {
   const navigate = useNavigate();
-  const { user, updateUser } = useAuth();
+  const { user, updateUser, sendOTP } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [resendDisabled, setResendDisabled] = useState(false);
   const [countdown, setCountdown] = useState(0);
@@ -37,10 +38,10 @@ const VerifyPhone = () => {
       return;
     }
     
-    // If user has already verified phone, redirect to dashboard
+    // If user has already verified phone, redirect to next step
     if (user.phoneVerified) {
       toast.success('Phone already verified');
-      navigate('/dashboard');
+      navigate('/verify/face');
     } else {
       // Send OTP on initial load
       handleSendOTP();
@@ -70,15 +71,13 @@ const VerifyPhone = () => {
     setCountdown(60);
     
     try {
-      // Generate and send OTP
-      const { data, error } = await supabase.rpc(
-        'generate_otp', 
-        { p_user_id: user.id, p_type: 'phone' }
-      );
+      const success = await sendOTP('phone');
       
-      if (error) throw new Error(error.message);
-      
-      toast.success(`OTP sent to your phone. For demo purposes, use any 6-digit number.`);
+      if (success) {
+        toast.success(`OTP sent to your phone. For demo purposes, use any 6-digit number.`);
+      } else {
+        throw new Error('Failed to send OTP');
+      }
     } catch (error: any) {
       toast.error(error.message || 'Failed to send OTP. Please try again.');
       setResendDisabled(false);
@@ -106,22 +105,8 @@ const VerifyPhone = () => {
         // Update local user state
         updateUser({ phoneVerified: true });
         
-        // Check if all verifications are complete
-        const { data: checkResult } = await supabase.rpc(
-          'check_verification_complete',
-          { p_user_id: user.id }
-        );
-        
         toast.success('Phone verification successful');
-        
-        // Redirect based on user role and verification status
-        if (user.role === 'candidate' && (!user.partyId || !user.verified)) {
-          navigate('/verify/party');
-        } else if (user.verified) {
-          navigate('/dashboard');
-        } else {
-          navigate('/verification-pending');
-        }
+        navigate('/verify/face');
       } else {
         toast.error('Invalid OTP. Please try again.');
       }
@@ -217,6 +202,8 @@ const VerifyPhone = () => {
                       )}
                     </Button>
                   </div>
+                  
+                  <VerificationProgress />
                 </CardContent>
               </form>
             </Form>
