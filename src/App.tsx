@@ -6,7 +6,7 @@ import { Toaster as SonnerToaster } from "sonner";
 import { AuthProvider } from "@/context/AuthContext";
 import { ElectionProvider } from "@/context/ElectionContext";
 import Index from "@/pages/Index";
-import Login from "@/pages/Login";
+import Login from "@/pages/LoginRefactored"; // Using the refactored login page
 import Register from "@/pages/Register";
 import Elections from "@/pages/Elections";
 import NotFound from "@/pages/NotFound";

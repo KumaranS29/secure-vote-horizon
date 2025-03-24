@@ -47,6 +47,7 @@ const indianStates = [
 const Register = () => {
   const navigate = useNavigate();
   const { register: registerUser, isLoading, user, session } = useAuth();
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Redirect if already logged in
   useEffect(() => {
@@ -95,6 +96,9 @@ const Register = () => {
   }, [selectedRole, form]);
   
   const onSubmit = async (data: RegisterForm) => {
+    if (isSubmitting) return;
+    
+    setIsSubmitting(true);
     console.log("Registration form submitted", data);
     
     // Additional validation for state field
@@ -103,6 +107,7 @@ const Register = () => {
         type: 'manual', 
         message: 'Please select your state' 
       });
+      setIsSubmitting(false);
       return;
     }
     
@@ -131,6 +136,8 @@ const Register = () => {
     } catch (error: any) {
       console.error("Registration error:", error);
       toast.error(error.message || 'Registration failed. Please try again.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -277,9 +284,9 @@ const Register = () => {
                     <Button
                       type="submit"
                       className="w-full"
-                      disabled={isLoading || !form.formState.isValid}
+                      disabled={isLoading || isSubmitting || !form.formState.isValid}
                     >
-                      {isLoading ? (
+                      {(isLoading || isSubmitting) ? (
                         <>
                           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                           Registering...

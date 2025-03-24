@@ -25,6 +25,7 @@ type LoginForm = z.infer<typeof loginSchema>;
 const Login = () => {
   const navigate = useNavigate();
   const { login, isLoading, user, session } = useAuth();
+  const [isSubmitting, setIsSubmitting] = useState(false);
   
   // Redirect if already logged in
   useEffect(() => {
@@ -40,15 +41,26 @@ const Login = () => {
       email: '',
       password: '',
     },
+    mode: 'onBlur', // Validate fields when they lose focus
   });
   
   const onSubmit = async (data: LoginForm) => {
-    console.log("Login form submitted", data);
-    const success = await login(data.email, data.password);
+    if (isSubmitting) return;
     
-    if (success) {
-      console.log("Login successful, redirecting to dashboard");
-      navigate('/dashboard');
+    setIsSubmitting(true);
+    console.log("Login form submitted", data);
+    
+    try {
+      const success = await login(data.email, data.password);
+      
+      if (success) {
+        console.log("Login successful, redirecting to dashboard");
+        navigate('/dashboard');
+      }
+    } catch (error) {
+      console.error("Login error:", error);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -112,9 +124,9 @@ const Login = () => {
                     <Button
                       type="submit"
                       className="w-full"
-                      disabled={isLoading}
+                      disabled={isLoading || isSubmitting || !form.formState.isValid}
                     >
-                      {isLoading ? (
+                      {(isLoading || isSubmitting) ? (
                         <>
                           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                           Signing in...
