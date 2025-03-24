@@ -1,4 +1,3 @@
-
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as SonnerToaster } from "sonner";
@@ -6,7 +5,7 @@ import { Toaster as SonnerToaster } from "sonner";
 import { AuthProvider } from "@/context/AuthContext";
 import { ElectionProvider } from "@/context/ElectionContext";
 import Index from "@/pages/Index";
-import Login from "@/pages/LoginRefactored"; // Using the refactored login page
+import Login from "@/pages/LoginRefactored";
 import Register from "@/pages/Register";
 import Elections from "@/pages/Elections";
 import NotFound from "@/pages/NotFound";
@@ -20,6 +19,8 @@ import VerificationPending from "@/pages/VerificationPending";
 import Dashboard from "@/pages/Dashboard";
 import ForgotPassword from "@/pages/ForgotPassword";
 import ResetPassword from "@/pages/ResetPassword";
+import VotingPage from "@/pages/VotingPage";
+import VoteConfirmation from "@/pages/VoteConfirmation";
 
 import "./App.css";
 
@@ -46,6 +47,8 @@ function App() {
               <Route path="/verify/face" element={<VerifyFace />} />
               <Route path="/verify/party" element={<VerifyParty />} />
               <Route path="/verification-pending" element={<VerificationPending />} />
+              <Route path="/elections/:electionId/vote" element={<VotingPage />} />
+              <Route path="/vote-confirmation" element={<VoteConfirmation />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </Router>
