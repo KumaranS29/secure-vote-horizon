@@ -29,8 +29,8 @@ const Login = () => {
   // Redirect if already logged in
   useEffect(() => {
     if (user && session) {
-      console.log("User already logged in, redirecting to /elections");
-      navigate('/elections');
+      console.log("User already logged in, redirecting to dashboard");
+      navigate('/dashboard');
     }
   }, [user, session, navigate]);
   
@@ -47,8 +47,8 @@ const Login = () => {
     const success = await login(data.email, data.password);
     
     if (success) {
-      console.log("Login successful, redirecting to /elections");
-      navigate('/elections');
+      console.log("Login successful, redirecting to dashboard");
+      navigate('/dashboard');
     }
   };
 

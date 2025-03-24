@@ -1,41 +1,71 @@
 
 import React from 'react';
-import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { CheckCircle, Clock } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Clock, CheckCircle2, ShieldCheck, ArrowLeft } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import Layout from '@/components/layout/Layout';
-import { useAuth } from '@/context/AuthContext';
+import { useAuth, UserRole } from '@/context/AuthContext';
 
 const VerificationPending = () => {
+  const navigate = useNavigate();
   const { user } = useAuth();
   
-  // Determine what's missing for verification
-  const getMissingVerifications = () => {
-    if (!user) return [];
+  const getVerificationStatus = () => {
+    if (!user) return null;
     
-    const missing = [];
+    const verifications = [
+      {
+        label: 'Email Verification',
+        completed: user.emailVerified,
+        path: '/verify/email'
+      },
+      {
+        label: 'Phone Verification',
+        completed: user.phoneVerified,
+        path: '/verify/phone'
+      }
+    ];
     
-    if (!user.emailVerified) missing.push('Email');
-    if (!user.phoneVerified) missing.push('Phone');
-    
-    if (user.role === 'overseas_voter') {
-      if (!user.passportVerified) missing.push('Passport');
+    // Add ID verification based on user role
+    if (user.role === UserRole.OverseasVoter) {
+      verifications.unshift({
+        label: 'Passport Verification',
+        completed: user.passportVerified,
+        path: '/verify/passport'
+      });
     } else {
-      if (!user.aadhaarVerified) missing.push('Aadhaar');
+      verifications.unshift({
+        label: 'Aadhaar Verification',
+        completed: user.aadhaarVerified,
+        path: '/verify/aadhaar'
+      });
     }
     
-    if (user.role === 'candidate' && !user.partyId) {
-      missing.push('Party ID');
+    // Add face verification
+    verifications.push({
+      label: 'Face Verification',
+      completed: user.faceVerified,
+      path: '/verify/face'
+    });
+    
+    // Add party registration for candidates
+    if (user.role === UserRole.Candidate) {
+      verifications.push({
+        label: 'Party Registration',
+        completed: !!user.partyId,
+        path: '/verify/party'
+      });
     }
     
-    return missing;
+    return verifications;
   };
   
-  const missingVerifications = getMissingVerifications();
-  
+  const verifications = getVerificationStatus();
+  const pendingVerification = verifications?.find(v => !v.completed);
+
   return (
     <Layout>
       <div className="flex items-center justify-center min-h-screen py-20 px-4">
@@ -48,91 +78,67 @@ const VerificationPending = () => {
           <Card className="border-muted/30 shadow-lg">
             <CardHeader className="space-y-1">
               <div className="flex justify-center mb-4">
-                {missingVerifications.length > 0 ? (
-                  <div className="w-16 h-16 bg-yellow-100 rounded-full flex items-center justify-center">
-                    <Clock className="h-8 w-8 text-yellow-500" />
-                  </div>
-                ) : (
-                  <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center">
-                    <CheckCircle className="h-8 w-8 text-green-500" />
-                  </div>
-                )}
+                <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center">
+                  <Clock className="h-8 w-8 text-amber-600" />
+                </div>
               </div>
-              
-              <CardTitle className="text-2xl font-bold text-center">
-                {missingVerifications.length > 0 
-                  ? "Verification Required" 
-                  : "Verification Complete"}
-              </CardTitle>
-              
+              <CardTitle className="text-2xl font-bold text-center">Verification Pending</CardTitle>
               <CardDescription className="text-center">
-                {missingVerifications.length > 0 
-                  ? "You need to complete these verifications before you can access all features" 
-                  : "Your account is now fully verified"}
+                Your account is being verified. Please complete all verification steps to access the platform.
               </CardDescription>
             </CardHeader>
             
-            <CardContent>
-              {missingVerifications.length > 0 ? (
-                <div className="space-y-4">
-                  <div className="bg-yellow-50 border border-yellow-200 rounded-md p-4">
-                    <h3 className="font-medium text-yellow-800 mb-2">Missing Verifications:</h3>
-                    <ul className="list-disc pl-5 text-yellow-700 space-y-1">
-                      {missingVerifications.map((item, index) => (
-                        <li key={index}>{item} verification</li>
-                      ))}
-                    </ul>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    {!user?.aadhaarVerified && user?.role !== 'overseas_voter' && (
-                      <Button asChild variant="outline" className="w-full">
-                        <Link to="/verify/aadhaar">Verify Aadhaar</Link>
-                      </Button>
+            <CardContent className="space-y-4">
+              <div className="space-y-3">
+                {verifications?.map((verification, index) => (
+                  <div 
+                    key={index}
+                    className="flex items-center p-3 rounded-lg border"
+                  >
+                    {verification.completed ? (
+                      <CheckCircle2 className="h-5 w-5 text-green-500 mr-3 flex-shrink-0" />
+                    ) : (
+                      <div className="h-5 w-5 rounded-full border-2 border-amber-500 mr-3 flex-shrink-0"></div>
                     )}
-                    
-                    {!user?.passportVerified && user?.role === 'overseas_voter' && (
-                      <Button asChild variant="outline" className="w-full">
-                        <Link to="/verify/passport">Verify Passport</Link>
-                      </Button>
-                    )}
-                    
-                    {!user?.emailVerified && (
-                      <Button asChild variant="outline" className="w-full">
-                        <Link to="/verify/email">Verify Email</Link>
-                      </Button>
-                    )}
-                    
-                    {!user?.phoneVerified && (
-                      <Button asChild variant="outline" className="w-full">
-                        <Link to="/verify/phone">Verify Phone</Link>
-                      </Button>
-                    )}
-                    
-                    {user?.role === 'candidate' && !user?.partyId && (
-                      <Button asChild variant="outline" className="w-full">
-                        <Link to="/verify/party">Verify Party ID</Link>
+                    <div className="flex-grow">
+                      <p className="font-medium">{verification.label}</p>
+                    </div>
+                    {!verification.completed && (
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => navigate(verification.path)}
+                      >
+                        Complete
                       </Button>
                     )}
                   </div>
+                ))}
+              </div>
+              
+              <div className="bg-blue-50 p-4 rounded-lg">
+                <div className="flex">
+                  <ShieldCheck className="h-5 w-5 text-blue-600 mr-2 flex-shrink-0" />
+                  <div>
+                    <p className="text-sm font-medium text-blue-800">Verification Status</p>
+                    <p className="text-sm text-blue-700 mt-1">
+                      {pendingVerification 
+                        ? `Please complete your ${pendingVerification.label.toLowerCase()} to proceed.`
+                        : 'All verifications complete! Your account is under review.'}
+                    </p>
+                  </div>
                 </div>
-              ) : (
-                <div className="bg-green-50 border border-green-200 rounded-md p-4">
-                  <p className="text-green-700">
-                    Congratulations! You have completed all required verifications. 
-                    You now have full access to the Electra Voting System.
-                  </p>
-                </div>
-              )}
+              </div>
             </CardContent>
             
             <CardFooter>
-              <Button asChild className="w-full">
-                <Link to="/dashboard">
-                  {missingVerifications.length > 0 
-                    ? "Continue with Limited Access" 
-                    : "Go to Dashboard"}
-                </Link>
+              <Button 
+                variant="outline" 
+                className="w-full"
+                onClick={() => navigate('/')}
+              >
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                Back to Home
               </Button>
             </CardFooter>
           </Card>
