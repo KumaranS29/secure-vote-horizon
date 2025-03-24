@@ -46,7 +46,7 @@ const indianStates = [
 
 const Register = () => {
   const navigate = useNavigate();
-  const { register, isLoading, user, session } = useAuth();
+  const { register: registerUser, isLoading, user, session } = useAuth();
 
   // Redirect if already logged in
   useEffect(() => {
@@ -65,13 +65,46 @@ const Register = () => {
       role: 'voter',
       state: '',
     },
+    mode: 'onBlur', // Validate fields when they lose focus
   });
 
   const selectedRole = form.watch('role');
   const requiresState = selectedRole !== 'overseas_voter';
   
+  // Update form schema based on role selection
+  useEffect(() => {
+    const updatedSchema = z.object({
+      name: z.string().min(2, { message: 'Name must be at least 2 characters' }),
+      email: z.string().email({ message: 'Please enter a valid email address' }),
+      phone: z.string().min(10, { message: 'Please enter a valid phone number' }),
+      password: z
+        .string()
+        .min(8, { message: 'Password must be at least 8 characters' })
+        .regex(/[A-Z]/, { message: 'Password must contain at least one uppercase letter' })
+        .regex(/[a-z]/, { message: 'Password must contain at least one lowercase letter' })
+        .regex(/[0-9]/, { message: 'Password must contain at least one number' }),
+      role: z.enum(['voter', 'candidate', 'state_official', 'overseas_voter'], {
+        required_error: 'Please select a role',
+      }),
+      state: requiresState 
+        ? z.string().min(1, { message: 'Please select your state' }) 
+        : z.string().optional(),
+    });
+    
+    form.clearErrors();
+  }, [selectedRole, form]);
+  
   const onSubmit = async (data: RegisterForm) => {
     console.log("Registration form submitted", data);
+    
+    // Additional validation for state field
+    if (requiresState && !data.state) {
+      form.setError('state', { 
+        type: 'manual', 
+        message: 'Please select your state' 
+      });
+      return;
+    }
     
     try {
       // Convert the form data to the format expected by the register function
@@ -83,7 +116,7 @@ const Register = () => {
         state: data.state,
       };
       
-      const success = await register(userData, data.password);
+      const success = await registerUser(userData, data.password);
       
       if (success) {
         console.log("Registration successful, redirecting based on role");
@@ -244,7 +277,7 @@ const Register = () => {
                     <Button
                       type="submit"
                       className="w-full"
-                      disabled={isLoading}
+                      disabled={isLoading || !form.formState.isValid}
                     >
                       {isLoading ? (
                         <>
